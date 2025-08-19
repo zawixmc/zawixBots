@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>zawixHolder - Bot Manager</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px 0;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #4ecdc4, #6ae7dd);
+        }
+        
+        .btn-success:hover {
+            box-shadow: 0 8px 25px rgba(78, 205, 196, 0.3);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, #e74c3c, #ff6b6b);
+        }
+        
+        .btn-danger:hover {
+            box-shadow: 0 8px 25px rgba(231, 76, 60, 0.3);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(45deg, #95a5a6, #bdc3c7);
+        }
+        
+        .btn-secondary:hover {
+            box-shadow: 0 8px 25px rgba(149, 165, 166, 0.3);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            margin: 30px auto;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            animation: modalSlideIn 0.3s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .modal h2 {
+            margin-bottom: 25px;
+            color: #4ecdc4;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        /* Inputs & selects */
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+        }
+        
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4ecdc4;
+            box-shadow: 0 0 10px rgba(78, 205, 196, 0.3);
+        }
+        
+        .form-group select {
+            cursor: pointer;
+        }
+        
+        .form-group select option {
+            background: #2c3e50;
+            color: white;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+        }
+        
+        .version-section {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        
+        .version-section h3 {
+            color: #4ecdc4;
+            margin-bottom: 15px;
+        }
+        
+        .version-info {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+        
+        .antiafk-section, .reconnect-section {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        
+        .antiafk-section h3, .reconnect-section h3 {
+            color: #ff6b6b;
+            margin-bottom: 15px;
+        }
+        
+        .switch-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.2);
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background: linear-gradient(45deg, #4ecdc4, #6ae7dd);
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .bots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .bot-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .bot-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        .bot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .bot-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #4ecdc4;
+        }
+        
+        .bot-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-connected {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+        }
+        
+        .status-connecting {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
+        }
+        
+        .status-disconnected {
+            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+        }
+        
+        .status-error {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        
+        .status-stopped {
+            background: linear-gradient(45deg, #34495e, #2c3e50);
+        }
+        
+        .status-kicked {
+            background: linear-gradient(45deg, #8e44ad, #9b59b6);
+        }
+        
+        .bot-info {
+            margin: 15px 0;
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+        
+        .bot-info div {
+            margin-bottom: 5px;
+        }
+        
+        .antiafk-info, .reconnect-info, .version-info-card {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .bot-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .bot-actions .btn {
+            flex: 1;
+            min-width: 80px;
+            justify-content: center;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #ff6b6b;
+        }
+        
+        .empty-state {
+            grid-column: 1/-1;
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            opacity: 0.3;
+            margin-bottom: 20px;
+            display: block;
+        }
+        
+        .empty-state h2 {
+            opacity: 0.7;
+            margin-bottom: 10px;
+        }
+        
+        .empty-state p {
+            opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .bots-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .bot-actions {
+                flex-direction: column;
+            }
+            
+            .bot-actions .btn {
+                width: 100%;
+            }
+            
+            .form-row {
+                flex-direction: column;
+            }
+        }
+
+        /* ===== Custom select styling to avoid white background ===== */
+
+        /* Target the specific select so we don't accidentally style all selects globally */
+        #minecraftVersion {
+            background-color: #2c3e50 !important; /* ciemne tło zgodne z modal */
+            color: #ffffff !important;            /* tekst w select */
+            border-color: rgba(255,255,255,0.15) !important;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            padding-right: 2.5em; /* miejsce na strzałkę */
+            position: relative;
+            background-image:
+                linear-gradient(45deg, transparent 50%, #ffffff 50%),
+                linear-gradient(135deg, #ffffff 50%, transparent 50%),
+                linear-gradient(to right, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+            background-position:
+                calc(100% - 20px) calc(50% - 6px),
+                calc(100% - 15px) calc(50% - 6px),
+                calc(100% - 2.5em) 0.5em;
+            background-size: 5px 5px, 5px 5px, 1px 1.5em;
+            background-repeat: no-repeat;
+        }
+
+        /* Options background (may be ignored by some browsers) */
+        #minecraftVersion option {
+            background-color: #2c3e50 !important;
+            color: #ffffff !important;
+        }
+
+        /* Optgroup label color */
+        #minecraftVersion optgroup {
+            color: #4ecdc4 !important;
+            font-weight: 700;
+        }
+
+        /* Focus style */
+        #minecraftVersion:focus {
+            box-shadow: 0 0 8px rgba(78, 205, 196, 0.25);
+            outline: none;
+        }
+
+        /* For smaller screens, reduce padding on select */
+        @media (max-width: 480px) {
+            #minecraftVersion { padding-right: 2em; }
+        }
+
+        /* NOTE: On some browsers (Safari/macOS) dropdown panels are native and might still appear white.
+           For full cross-browser styled dropdown you need a custom JS component. */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-robot"></i> zawixHolder</h1>
+            <p>Zaawansowany Manager Botów Minecraft</p>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" id="newBotBtn">
+                <i class="fas fa-plus"></i> Nowy Bot
+            </button>
+        </div>
+        
+        <div class="bots-grid" id="botsContainer">
+            <div class="empty-state">
+                <i class="fas fa-robot"></i>
+                <h2>Brak botów</h2>
+                <p>Kliknij "Nowy Bot" aby utworzyć swojego pierwszego bota</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for creating new bot -->
+    <div id="botModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-robot"></i> Utwórz Nowego Bota</h2>
+            <form id="botForm">
+                <div class="form-group">
+                    <label for="botName">Nazwa Bota:</label>
+                    <input type="text" id="botName" required placeholder="np. MójBot123">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="serverHost">IP Serwera:</label>
+                        <input type="text" id="serverHost" required placeholder="np. play.hypixel.net">
+                    </div>
+                    <div class="form-group">
+                        <label for="serverPort">Port:</label>
+                        <input type="number" id="serverPort" value="25565" min="1" max="65535">
+                    </div>
+                </div>
+                
+                <div class="version-section">
+                    <h3><i class="fas fa-code-branch"></i> Wersja Minecraft</h3>
+                    <div class="form-group">
+                        <label for="minecraftVersion">Wybierz wersję:</label>
+                        <select id="minecraftVersion" required>
+                            <option value="auto">Auto (Wykryj Automatycznie)</option>
+                            <optgroup label="Najnowsze">
+                                <option value="1.21.1">1.21.1</option>
+                                <option value="1.21">1.21</option>
+                                <option value="1.20.6">1.20.6</option>
+                                <option value="1.20.4">1.20.4</option>
+                                <option value="1.20.2">1.20.2</option>
+                                <option value="1.20.1">1.20.1</option>
+                                <option value="1.20">1.20</option>
+                            </optgroup>
+                            <optgroup label="Poprzednie">
+                                <option value="1.19.4">1.19.4</option>
+                                <option value="1.19.3">1.19.3</option>
+                                <option value="1.19.2">1.19.2</option>
+                                <option value="1.19.1">1.19.1</option>
+                                <option value="1.19">1.19</option>
+                                <option value="1.18.2">1.18.2</option>
+                                <option value="1.18.1">1.18.1</option>
+                                <option value="1.18">1.18</option>
+                                <option value="1.17.1">1.17.1</option>
+                                <option value="1.17">1.17</option>
+                                <option value="1.16.5">1.16.5</option>
+                                <option value="1.16.4">1.16.4</option>
+                                <option value="1.16.3">1.16.3</option>
+                                <option value="1.16.2">1.16.2</option>
+                                <option value="1.16.1">1.16.1</option>
+                                <option value="1.16">1.16</option>
+                                <option value="1.15.2">1.15.2</option>
+                                <option value="1.15.1">1.15.1</option>
+                                <option value="1.15">1.15</option>
+                                <option value="1.14.4">1.14.4</option>
+                                <option value="1.14.3">1.14.3</option>
+                                <option value="1.14.2">1.14.2</option>
+                                <option value="1.14.1">1.14.1</option>
+                                <option value="1.14">1.14</option>
+                                <option value="1.13.2">1.13.2</option>
+                                <option value="1.13.1">1.13.1</option>
+                                <option value="1.13">1.13</option>
+                                <option value="1.12.2">1.12.2</option>
+                                <option value="1.12.1">1.12.1</option>
+                                <option value="1.12">1.12</option>
+                                <option value="1.11.2">1.11.2</option>
+                                <option value="1.11.1">1.11.1</option>
+                                <option value="1.11">1.11</option>
+                                <option value="1.10.2">1.10.2</option>
+                                <option value="1.10.1">1.10.1</option>
+                                <option value="1.10">1.10</option>
+                                <option value="1.9.4">1.9.4</option>
+                                <option value="1.9.3">1.9.3</option>
+                                <option value="1.9.2">1.9.2</option>
+                                <option value="1.9.1">1.9.1</option>
+                                <option value="1.9">1.9</option>
+                                <option value="1.8.9">1.8.9</option>
+                                <option value="1.8.8">1.8.8</option>
+                                <option value="1.8">1.8</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="version-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Auto:</strong> Bot automatycznie wykryje wersję serwera (zalecane).<br>
+                        <strong>Konkretna wersja:</strong> Wymuś określoną wersję protokołu.
+                    </div>
+                </div>
+                
+                <div class="reconnect-section">
+                    <h3><i class="fas fa-sync-alt"></i> Reconnect</h3>
+                    <div class="form-group">
+                        <label for="reconnectInterval">Interwał reconnect (sekundy):</label>
+                        <input type="number" id="reconnectInterval" value="5" min="1" max="60" placeholder="5">
+                    </div>
+                </div>
+                
+                <div class="antiafk-section">
+                    <h3><i class="fas fa-shield-alt"></i> Anti-AFK</h3>
+                    <div class="switch-group">
+                        <span>Kucanie:</span>
+                        <label class="switch">
+                            <input type="checkbox" id="antiAfkCrouch">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="switch-group">
+                        <span>Skakanie:</span>
+                        <label class="switch">
+                            <input type="checkbox" id="antiAfkJump">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 25px; display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Utwórz Bota
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">
+                        <i class="fas fa-times"></i> Anuluj
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let bots = [];
+        
+        console.log('Script loaded');
+        
+        // Modal handling
+        const modal = document.getElementById('botModal');
+        const newBotBtn = document.getElementById('newBotBtn');
+        const closeBtn = document.querySelector('.close');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const botForm = document.getElementById('botForm');
+        
+        console.log('Elements found:', {
+            modal: !!modal,
+            newBotBtn: !!newBotBtn,
+            closeBtn: !!closeBtn,
+            cancelBtn: !!cancelBtn,
+            botForm: !!botForm
+        });
+        
+        if (newBotBtn) {
+            newBotBtn.addEventListener('click', () => {
+                console.log('New bot button clicked');
+                modal.style.display = 'block';
+                // ensure default select color (some browsers re-evaluate on open)
+                document.getElementById('minecraftVersion').style.backgroundColor = '#2c3e50';
+            });
+        }
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                console.log('Close button clicked');
+                modal.style.display = 'none';
+            });
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                console.log('Cancel button clicked');
+                modal.style.display = 'none';
+            });
+        }
+        
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                console.log('Modal overlay clicked');
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Form submission
+        if (botForm) {
+            botForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                console.log('Form submitted');
+                
+                const selectedVersion = document.getElementById('minecraftVersion').value;
+                
+                const config = {
+                    username: document.getElementById('botName').value,
+                    host: document.getElementById('serverHost').value,
+                    port: parseInt(document.getElementById('serverPort').value),
+                    version: selectedVersion === 'auto' ? 'auto' : selectedVersion,
+                    reconnectInterval: parseInt(document.getElementById('reconnectInterval').value) || 5,
+                    antiAfk: {
+                        crouch: document.getElementById('antiAfkCrouch').checked,
+                        jump: document.getElementById('antiAfkJump').checked
+                    }
+                };
+                
+                console.log('Bot config:', config);
+                socket.emit('createBot', config);
+                modal.style.display = 'none';
+                botForm.reset();
+            });
+        }
+        
+        // Socket events
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+        
+        socket.on('botsUpdate', (updatedBots) => {
+            console.log('Bots update received:', updatedBots);
+            bots = updatedBots;
+            renderBots();
+        });
+        
+        function renderBots() {
+            console.log('Rendering bots:', bots);
+            const container = document.getElementById('botsContainer');
+            
+            if (!container) {
+                console.error('Bots container not found');
+                return;
+            }
+            
+            if (bots.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-robot"></i>
+                        <h2>Brak botów</h2>
+                        <p>Kliknij "Nowy Bot" aby utworzyć swojego pierwszego bota</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = bots.map(bot => `
+                <div class="bot-card">
+                    <div class="bot-header">
+                        <div class="bot-name">
+                            <i class="fas fa-robot"></i> ${bot.name}
+                        </div>
+                        <div class="bot-status status-${bot.status}">
+                            ${getStatusText(bot.status)}
+                        </div>
+                    </div>
+                    <div class="bot-info">
+                        <div><i class="fas fa-server"></i> <strong>Serwer:</strong> ${bot.host}:${bot.port}</div>
+                        <div><i class="fas fa-plug"></i> <strong>Status:</strong> ${getStatusDescription(bot.status)}</div>
+                    </div>
+                    <div class="version-info-card">
+                        <strong><i class="fas fa-code-branch"></i> Wersja:</strong> ${getVersionText(bot.version)}
+                    </div>
+                    <div class="reconnect-info">
+                        <strong><i class="fas fa-sync-alt"></i> Reconnect:</strong> co ${bot.reconnectInterval || 5}s
+                    </div>
+                    <div class="antiafk-info">
+                        <strong><i class="fas fa-shield-alt"></i> Anti-AFK:</strong> ${getAntiAfkText(bot.antiAfk)}
+                    </div>
+                    <div class="bot-actions">
+                        ${bot.status === 'connected' || bot.status === 'connecting' 
+                            ? `<button class="btn btn-danger" onclick="stopBot('${bot.id}')">
+                                 <i class="fas fa-stop"></i> Stop
+                               </button>`
+                            : `<button class="btn btn-success" onclick="startBot('${bot.id}')">
+                                 <i class="fas fa-play"></i> Start
+                               </button>`
+                        }
+                        <button class="btn btn-secondary" onclick="deleteBot('${bot.id}')">
+                            <i class="fas fa-trash"></i> Usuń
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function getStatusText(status) {
+            const statusMap = {
+                'connected': 'ONLINE',
+                'connecting': 'CONNECTING',
+                'disconnected': 'OFFLINE',
+                'error': 'OFFLINE',
+                'stopped': 'OFFLINE',
+                'kicked': 'OFFLINE'
+            };
+            return statusMap[status] || status;
+        }
+        
+        function getStatusDescription(status) {
+            const statusMap = {
+                'connected': 'Bot jest podłączony do serwera',
+                'connecting': 'Bot próbuje się połączyć...',
+                'disconnected': 'Bot nie jest połączony',
+                'error': 'Wystąpił błąd połączenia',
+                'stopped': 'Bot został zatrzymany przez użytkownika',
+                'kicked': 'Bot został wyrzucony z serwera'
+            };
+            return statusMap[status] || 'Nieznany status';
+        }
+        
+        function getVersionText(version) {
+            if (!version || version === 'auto') {
+                return 'Auto (wykryj automatycznie)';
+            }
+            return version;
+        }
+        
+        function getAntiAfkText(antiAfk) {
+            if (!antiAfk || (!antiAfk.crouch && !antiAfk.jump)) return 'Wyłączony';
+            
+            const features = [];
+            if (antiAfk.crouch) features.push('Kucanie');
+            if (antiAfk.jump) features.push('Skakanie');
+            return features.join(' + ');
+        }
+        
+        function startBot(botId) {
+            console.log('Starting bot:', botId);
+            socket.emit('startBot', botId);
+        }
+        
+        function stopBot(botId) {
+            console.log('Stopping bot:', botId);
+            socket.emit('stopBot', botId);
+        }
+        
+        function deleteBot(botId) {
+            if (confirm('Czy na pewno chcesz usunąć tego bota?')) {
+                console.log('Deleting bot:', botId);
+                socket.emit('deleteBot', botId);
+            }
+        }
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, rendering initial state');
+            renderBots();
+        });
+    </script>
+</body>
+</html>
