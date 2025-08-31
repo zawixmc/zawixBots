@@ -17,11 +17,36 @@ app.use(express.json());
 // Storage for bots
 const bots = new Map();
 const botIntervals = new Map();
+const botLogs = new Map(); // Storage for bot logs
 
 // Serve the main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Helper function to add log entry
+function addLogEntry(botId, type, message) {
+    if (!botLogs.has(botId)) {
+        botLogs.set(botId, []);
+    }
+    
+    const entry = {
+        timestamp: Date.now(),
+        type: type,
+        message: message
+    };
+    
+    botLogs.get(botId).push(entry);
+    
+    // Keep only last 500 logs
+    const logs = botLogs.get(botId);
+    if (logs.length > 500) {
+        logs.splice(0, logs.length - 500);
+    }
+    
+    // Emit to clients
+    io.emit('newLogEntry', { botId, entry });
+}
 
 // Funkcja do automatycznego wykrywania wersji serwera
 async function detectServerVersion(host, port) {
@@ -167,6 +192,9 @@ io.on('connection', (socket) => {
         };
         
         bots.set(botId, botData);
+        botLogs.set(botId, []); // Initialize logs for this bot
+        addLogEntry(botId, 'info', `Bot ${config.username} został utworzony`);
+        
         io.emit('botsUpdate', Array.from(bots.values()).map(bd => ({
             id: bd.id,
             name: bd.config.username,
@@ -180,37 +208,67 @@ io.on('connection', (socket) => {
         })));
     });
 
-    // Handle bot start
-    socket.on('startBot', (botId) => {
+    // Handle bot actions with password verification
+    socket.on('botAction', (data) => {
+        const { action, botId, password } = data;
         const botData = bots.get(botId);
-        if (!botData) return;
+        
+        if (!botData) {
+            socket.emit('actionResult', { success: false, message: 'Bot nie istnieje' });
+            return;
+        }
 
-        startBot(botId);
+        // Verify password
+        if (botData.config.password !== password) {
+            socket.emit('actionResult', { success: false, message: 'Nieprawidłowe hasło' });
+            return;
+        }
+
+        // Execute action
+        switch (action) {
+            case 'start':
+                startBot(botId);
+                socket.emit('actionResult', { success: true });
+                break;
+            case 'stop':
+                stopBot(botId);
+                socket.emit('actionResult', { success: true });
+                break;
+            case 'delete':
+                stopBot(botId);
+                bots.delete(botId);
+                botLogs.delete(botId);
+                io.emit('botsUpdate', Array.from(bots.values()).map(bd => ({
+                    id: bd.id,
+                    name: bd.config.username,
+                    host: bd.config.host,
+                    port: bd.config.port,
+                    version: bd.config.version,
+                    detectedVersion: bd.detectedVersion,
+                    status: bd.status,
+                    antiAfk: bd.config.antiAfk,
+                    reconnectInterval: bd.config.reconnectInterval
+                })));
+                socket.emit('actionResult', { success: true });
+                break;
+            case 'logs':
+                const logs = botLogs.get(botId) || [];
+                socket.emit('logsAccess', { 
+                    success: true, 
+                    logs: logs, 
+                    botName: botData.config.username 
+                });
+                break;
+            default:
+                socket.emit('actionResult', { success: false, message: 'Nieznana akcja' });
+        }
     });
 
-    // Handle bot stop
-    socket.on('stopBot', (botId) => {
-        const botData = bots.get(botId);
-        if (!botData) return;
-
-        stopBot(botId);
-    });
-
-    // Handle bot deletion
-    socket.on('deleteBot', (botId) => {
-        stopBot(botId);
-        bots.delete(botId);
-        io.emit('botsUpdate', Array.from(bots.values()).map(bd => ({
-            id: bd.id,
-            name: bd.config.username,
-            host: bd.config.host,
-            port: bd.config.port,
-            version: bd.config.version,
-            detectedVersion: bd.detectedVersion,
-            status: bd.status,
-            antiAfk: bd.config.antiAfk,
-            reconnectInterval: bd.config.reconnectInterval
-        })));
+    // Clear logs
+    socket.on('clearLogs', (botId) => {
+        if (botLogs.has(botId)) {
+            botLogs.set(botId, []);
+        }
     });
 
     socket.on('disconnect', () => {
@@ -225,6 +283,7 @@ async function startBot(botId) {
     botData.status = 'connecting';
     botData.shouldReconnect = true;
     updateBotStatus();
+    addLogEntry(botId, 'info', `Rozpoczynam uruchamianie bota ${botData.config.username}`);
 
     try {
         let botVersion = botData.config.version;
@@ -233,27 +292,27 @@ async function startBot(botId) {
         if (botVersion === 'auto') {
             botData.status = 'detecting_version';
             updateBotStatus();
-            console.log(`🔍 Wykrywanie wersji serwera ${botData.config.host}:${botData.config.port}...`);
+            addLogEntry(botId, 'info', `Wykrywanie wersji serwera ${botData.config.host}:${botData.config.port}...`);
             
             try {
                 // Pierwsza próba - użyj ping protokołu
                 botVersion = await pingServer(botData.config.host, botData.config.port);
                 botData.detectedVersion = botVersion;
-                console.log(`✅ Wykryto wersję przez ping: ${botVersion}`);
+                addLogEntry(botId, 'success', `Wykryto wersję przez ping: ${botVersion}`);
             } catch (pingError) {
-                console.log(`⚠️ Ping nie powiódł się: ${pingError.message}`);
+                addLogEntry(botId, 'warning', `Ping nie powiódł się: ${pingError.message}`);
                 
                 try {
                     // Druga próba - użyj mineflayer detection
                     botVersion = await detectServerVersion(botData.config.host, botData.config.port);
                     botData.detectedVersion = botVersion;
-                    console.log(`✅ Wykryto wersję przez mineflayer: ${botVersion}`);
+                    addLogEntry(botId, 'success', `Wykryto wersję przez mineflayer: ${botVersion}`);
                 } catch (detectionError) {
-                    console.log(`⚠️ Automatyczne wykrywanie nie powiodło się: ${detectionError.message}`);
+                    addLogEntry(botId, 'warning', `Automatyczne wykrywanie nie powiodło się: ${detectionError.message}`);
                     // Użyj domyślnej wersji
                     botVersion = '1.20.1';
                     botData.detectedVersion = botVersion + ' (domyślna)';
-                    console.log(`🔄 Używam domyślnej wersji: ${botVersion}`);
+                    addLogEntry(botId, 'info', `Używam domyślnej wersji: ${botVersion}`);
                 }
             }
             
@@ -271,25 +330,22 @@ async function startBot(botId) {
             hideErrors: false
         };
 
-        console.log(`Tworzenie bota z opcjami:`, {
-            ...botOptions,
-            detectedVersion: botData.detectedVersion
-        });
+        addLogEntry(botId, 'info', `Tworzenie bota z opcjami: ${JSON.stringify({...botOptions, detectedVersion: botData.detectedVersion})}`);
         
         const bot = mineflayer.createBot(botOptions);
         botData.bot = bot;
 
         bot.once('spawn', () => {
             const actualVersion = bot.version || botVersion;
-            console.log(`✅ Bot ${botData.config.username} pomyślnie wszedł na serwer ${botData.config.host}:${botData.config.port}`);
-            console.log(`   📦 Wersja: ${actualVersion}${botData.detectedVersion ? ` (wykryta: ${botData.detectedVersion})` : ''}`);
+            addLogEntry(botId, 'success', `Bot ${botData.config.username} pomyślnie wszedł na serwer ${botData.config.host}:${botData.config.port}`);
+            addLogEntry(botId, 'info', `Wersja: ${actualVersion}${botData.detectedVersion ? ` (wykryta: ${botData.detectedVersion})` : ''}`);
             
             botData.status = 'connected';
             botData.reconnectAttempts = 0;
             botData.actualVersion = actualVersion;
             updateBotStatus();
             
-            console.log(`   📍 Pozycja: x=${bot.entity.position.x.toFixed(2)}, y=${bot.entity.position.y.toFixed(2)}, z=${bot.entity.position.z.toFixed(2)}`);
+            addLogEntry(botId, 'info', `Pozycja: x=${bot.entity.position.x.toFixed(2)}, y=${bot.entity.position.y.toFixed(2)}, z=${bot.entity.position.z.toFixed(2)}`);
             
             // Setup anti-AFK po pomyślnym spawnie z opóźnieniem
             setTimeout(() => {
@@ -298,27 +354,27 @@ async function startBot(botId) {
         });
 
         bot.once('login', () => {
-            console.log(`🔐 Bot ${botData.config.username} zalogowany do ${botData.config.host}:${botData.config.port}`);
+            addLogEntry(botId, 'info', `Bot ${botData.config.username} zalogowany do ${botData.config.host}:${botData.config.port}`);
         });
 
         bot.on('error', (err) => {
-            console.log(`❌ Bot ${botData.config.username} błąd:`, err.message);
+            addLogEntry(botId, 'error', `Bot ${botData.config.username} błąd: ${err.message}`);
             
             if (err.message.includes('getaddrinfo ENOTFOUND')) {
-                console.log(`🌐 Nie można rozwiązać adresu: ${botData.config.host}`);
+                addLogEntry(botId, 'error', `Nie można rozwiązać adresu: ${botData.config.host}`);
             } else if (err.message.includes('ECONNREFUSED')) {
-                console.log(`🚫 Połączenie odrzucone na porcie ${botData.config.port}`);
+                addLogEntry(botId, 'error', `Połączenie odrzucone na porcie ${botData.config.port}`);
             } else if (err.message.includes('Invalid username')) {
-                console.log(`👤 Nieprawidłowa nazwa użytkownika: ${botData.config.username}`);
+                addLogEntry(botId, 'error', `Nieprawidłowa nazwa użytkownika: ${botData.config.username}`);
             } else if (err.message.includes('Unsupported protocol version')) {
-                console.log(`🔄 Nieobsługiwana wersja protokołu. Spróbuj innej wersji.`);
+                addLogEntry(botId, 'error', `Nieobsługiwana wersja protokołu. Spróbuj innej wersji.`);
                 
                 // Jeśli była próba auto-detection, spróbuj z inną wersją
                 if (botData.config.version === 'auto' && botData.reconnectAttempts < 3) {
                     const fallbackVersions = ['1.19.4', '1.18.2', '1.16.5'];
                     const fallbackVersion = fallbackVersions[botData.reconnectAttempts];
                     if (fallbackVersion) {
-                        console.log(`🔄 Próbuję z wersją fallback: ${fallbackVersion}`);
+                        addLogEntry(botId, 'info', `Próbuję z wersją fallback: ${fallbackVersion}`);
                         botData.detectedVersion = fallbackVersion + ' (fallback)';
                     }
                 }
@@ -335,7 +391,7 @@ async function startBot(botId) {
             // Automatyczne ponowne połączenie z konfiguralnym opóźnieniem
             if (botData.shouldReconnect && botData.reconnectAttempts < 10) {
                 const delaySeconds = botData.config.reconnectInterval || 5;
-                console.log(`🔄 Ponowne połączenie za ${delaySeconds}s (próba ${botData.reconnectAttempts + 1}/10)`);
+                addLogEntry(botId, 'info', `Ponowne połączenie za ${delaySeconds}s (próba ${botData.reconnectAttempts + 1}/10)`);
                 
                 botData.reconnectTimeout = setTimeout(() => {
                     if (botData.shouldReconnect) {
@@ -347,7 +403,7 @@ async function startBot(botId) {
         });
 
         bot.on('end', () => {
-            console.log(`🔌 Bot ${botData.config.username} rozłączony`);
+            addLogEntry(botId, 'info', `Bot ${botData.config.username} rozłączony`);
             botData.status = 'disconnected';
             updateBotStatus();
             
@@ -358,7 +414,7 @@ async function startBot(botId) {
             
             if (botData.shouldReconnect && botData.reconnectAttempts < 10) {
                 const delaySeconds = botData.config.reconnectInterval || 5;
-                console.log(`🔄 Ponowne połączenie za ${delaySeconds}s`);
+                addLogEntry(botId, 'info', `Ponowne połączenie za ${delaySeconds}s`);
                 botData.reconnectTimeout = setTimeout(() => {
                     if (botData.shouldReconnect) {
                         botData.reconnectAttempts++;
@@ -369,29 +425,27 @@ async function startBot(botId) {
         });
 
         bot.on('kicked', (reason, loggedIn) => {
-            console.log(`👢 Bot ${botData.config.username} został wyrzucony:`);
-            console.log(`   Powód: ${reason}`);
-            console.log(`   Był zalogowany: ${loggedIn}`);
+            addLogEntry(botId, 'warning', `Bot ${botData.config.username} został wyrzucony: ${reason} (zalogowany: ${loggedIn})`);
             botData.status = 'kicked';
             updateBotStatus();
         });
 
         bot.on('connect', () => {
-            console.log(`🔗 Bot ${botData.config.username} nawiązał połączenie TCP`);
+            addLogEntry(botId, 'info', `Bot ${botData.config.username} nawiązał połączenie TCP`);
         });
 
         bot.on('disconnect', (packet) => {
-            console.log(`❌ Bot ${botData.config.username} został rozłączony:`, packet.reason);
+            addLogEntry(botId, 'error', `Bot ${botData.config.username} został rozłączony: ${packet.reason}`);
         });
 
         bot.on('chat', (username, message) => {
             if (username === bot.username) return;
-            console.log(`💬 [${botData.config.username}] ${username}: ${message}`);
+            addLogEntry(botId, 'chat', `[${botData.config.username}] ${username}: ${message}`);
         });
 
         // Obsługa respawn po śmierci
         bot.on('death', () => {
-            console.log(`💀 Bot ${botData.config.username} umarł - respawn za 2s`);
+            addLogEntry(botId, 'warning', `Bot ${botData.config.username} umarł - respawn za 2s`);
             setTimeout(() => {
                 if (bot && !bot.ended) {
                     bot.respawn();
@@ -404,7 +458,7 @@ async function startBot(botId) {
         });
 
         bot.on('respawn', () => {
-            console.log(`🔄 Bot ${botData.config.username} respawnował`);
+            addLogEntry(botId, 'info', `Bot ${botData.config.username} respawnował`);
             // Restart anti-AFK po respawn
             setTimeout(() => {
                 setupAntiAfk(botId);
@@ -412,7 +466,7 @@ async function startBot(botId) {
         });
 
     } catch (error) {
-        console.log(`💥 Błąd podczas tworzenia bota ${botData.config.username}:`, error.message);
+        addLogEntry(botId, 'error', `Błąd podczas tworzenia bota ${botData.config.username}: ${error.message}`);
         botData.status = 'error';
         updateBotStatus();
     }
@@ -422,7 +476,7 @@ function stopBot(botId) {
     const botData = bots.get(botId);
     if (!botData) return;
 
-    console.log(`🛑 Zatrzymywanie bota ${botData.config.username}`);
+    addLogEntry(botId, 'info', `Zatrzymywanie bota ${botData.config.username}`);
     botData.shouldReconnect = false;
     
     // Clear reconnect timeout
@@ -435,7 +489,7 @@ function stopBot(botId) {
     if (botIntervals.has(botId)) {
         clearInterval(botIntervals.get(botId));
         botIntervals.delete(botId);
-        console.log(`🛡️ Anti-AFK zatrzymany dla bota ${botData.config.username}`);
+        addLogEntry(botId, 'info', `Anti-AFK zatrzymany dla bota ${botData.config.username}`);
     }
 
     if (botData.bot) {
@@ -448,7 +502,7 @@ function stopBot(botId) {
             
             botData.bot.quit('Zatrzymany przez użytkownika');
         } catch (error) {
-            console.log('❌ Błąd podczas zatrzymywania bota:', error.message);
+            addLogEntry(botId, 'error', `Błąd podczas zatrzymywania bota: ${error.message}`);
         }
         botData.bot = null;
     }
@@ -456,6 +510,7 @@ function stopBot(botId) {
     botData.status = 'stopped';
     botData.reconnectAttempts = 0;
     updateBotStatus();
+    addLogEntry(botId, 'info', `Bot ${botData.config.username} został zatrzymany`);
 }
 
 function setupAntiAfk(botId) {
@@ -466,7 +521,7 @@ function setupAntiAfk(botId) {
     
     // Sprawdź czy anti-AFK jest włączony
     if (!antiAfkConfig.crouch && !antiAfkConfig.jump) {
-        console.log(`🛡️ Anti-AFK wyłączony dla bota ${botData.config.username}`);
+        addLogEntry(botId, 'info', `Anti-AFK wyłączony dla bota ${botData.config.username}`);
         return;
     }
 
@@ -480,7 +535,7 @@ function setupAntiAfk(botId) {
     const features = [];
     if (antiAfkConfig.crouch) features.push('Kucanie');
     if (antiAfkConfig.jump) features.push('Skakanie');
-    console.log(`🛡️ Anti-AFK dla bota ${botData.config.username} - włączono: ${features.join(' + ')}`);
+    addLogEntry(botId, 'info', `Anti-AFK dla bota ${botData.config.username} - włączono: ${features.join(' + ')}`);
 
     const bot = botData.bot;
     
@@ -494,14 +549,14 @@ function setupAntiAfk(botId) {
             bot.setControlState('jump', true);
         }
     } catch (error) {
-        console.log(`❌ Błąd podczas włączania Anti-AFK dla bota ${botData.config.username}:`, error.message);
+        addLogEntry(botId, 'error', `Błąd podczas włączania Anti-AFK dla bota ${botData.config.username}: ${error.message}`);
     }
     
     // Sprawdzaj co jakiś czas czy bot nadal istnieje i jest połączony
     const healthCheckInterval = setInterval(() => {
         // Sprawdź czy bot nadal istnieje i jest połączony
         if (!bot || bot.ended || !botData.shouldReconnect || botData.status !== 'connected') {
-            console.log(`🛡️ Anti-AFK zatrzymany - bot ${botData.config.username} niedostępny`);
+            addLogEntry(botId, 'info', `Anti-AFK zatrzymany - bot ${botData.config.username} niedostępny`);
             clearInterval(healthCheckInterval);
             botIntervals.delete(botId);
             return;
@@ -517,7 +572,7 @@ function setupAntiAfk(botId) {
                 bot.setControlState('jump', true);
             }
         } catch (error) {
-            console.log(`❌ Błąd podczas przywracania Anti-AFK dla bota ${botData.config.username}:`, error.message);
+            addLogEntry(botId, 'error', `Błąd podczas przywracania Anti-AFK dla bota ${botData.config.username}: ${error.message}`);
         }
     }, 5000); // Sprawdzaj co 5 sekund
 
