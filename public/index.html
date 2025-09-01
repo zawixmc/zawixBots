@@ -213,6 +213,21 @@
                     Brak logów do wyświetlenia
                 </div>
             </div>
+            <div class="chat-input-section">
+                <div class="chat-input-header">
+                    <i class="fas fa-comment"></i> Chat
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="chatInput" placeholder="Wpisz wiadomość lub komende">
+                    <button class="btn btn-primary" id="sendChatBtn">
+                        <i class="fas fa-paper-plane"></i> Wyślij
+                    </button>
+                </div>
+                <div class="chat-input-info">
+                    <i class="fas fa-info-circle"></i> 
+                    Wiadomości pojawią się w logach
+                </div>
+            </div>
         </div>
     </div>
 
@@ -248,6 +263,10 @@
         const logsContainer = document.getElementById('logsContainer');
         const logsBotName = document.getElementById('logsBotName');
         const clearLogsBtn = document.getElementById('clearLogsBtn');
+
+        // Chat input elements
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
         
         console.log('Elements found:', {
             modal: !!modal,
@@ -256,7 +275,9 @@
             newBotBtn: !!newBotBtn,
             closeBtn: !!closeBtn,
             cancelBtn: !!cancelBtn,
-            botForm: !!botForm
+            botForm: !!botForm,
+            chatInput: !!chatInput,
+            sendChatBtn: !!sendChatBtn
         });
         
         if (newBotBtn) {
@@ -335,6 +356,33 @@
                     renderLogs();
                 }
             });
+        }
+
+        // Chat input handlers
+        if (sendChatBtn) {
+            sendChatBtn.addEventListener('click', () => {
+                sendChatMessage();
+            });
+        }
+
+        if (chatInput) {
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+        }
+
+        function sendChatMessage() {
+            const message = chatInput.value.trim();
+            if (!message || !currentBotId) return;
+
+            socket.emit('sendBotMessage', {
+                botId: currentBotId,
+                message: message
+            });
+
+            chatInput.value = '';
         }
         
         window.addEventListener('click', (event) => {
@@ -425,6 +473,22 @@
                 // Auto scroll to bottom
                 const container = document.getElementById('logsContainer');
                 container.scrollTop = container.scrollHeight;
+            }
+        });
+
+        socket.on('chatMessageSent', (data) => {
+            if (data.botId === currentBotId) {
+                if (data.success) {
+                    // Message sent successfully, will appear in logs
+                } else {
+                    // Show error in logs
+                    currentBotLogs.push({
+                        timestamp: Date.now(),
+                        type: 'error',
+                        message: `Błąd wysyłania wiadomości: ${data.error}`
+                    });
+                    renderLogs();
+                }
             }
         });
 
@@ -612,5 +676,71 @@
             renderBots();
         });
     </script>
-</body>
-</html>
+
+    <style>
+        /* Chat input section styles */
+        .chat-input-section {
+            border-top: 2px solid #34495e;
+            margin-top: 20px;
+            padding-top: 15px;
+        }
+
+        .chat-input-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ecf0f1;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .chat-input-container input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 2px solid #34495e;
+            border-radius: 6px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            font-size: 14px;
+        }
+
+        .chat-input-container input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+
+        .chat-input-container input::placeholder {
+            color: #bdc3c7;
+        }
+
+        .chat-input-info {
+            font-size: 12px;
+            color: #95a5a6;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Update logs modal to accommodate chat input */
+        .logs-modal-content {
+            width: 90%;
+            max-width: 900px;
+            height: 80vh;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logs-container {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 0;
+        }

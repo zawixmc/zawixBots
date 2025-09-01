@@ -264,6 +264,56 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Handle sending messages/commands through bot
+    socket.on('sendBotMessage', (data) => {
+        const { botId, message } = data;
+        const botData = bots.get(botId);
+        
+        if (!botData) {
+            socket.emit('chatMessageSent', { 
+                botId, 
+                success: false, 
+                error: 'Bot nie istnieje' 
+            });
+            return;
+        }
+
+        if (!botData.bot || botData.status !== 'connected') {
+            socket.emit('chatMessageSent', { 
+                botId, 
+                success: false, 
+                error: 'Bot nie jest połączony' 
+            });
+            addLogEntry(botId, 'error', `Nie można wysłać wiadomości - bot nie jest połączony`);
+            return;
+        }
+
+        try {
+            if (message.startsWith('/')) {
+                // Command
+                const command = message.substring(1);
+                botData.bot.chat(`/${command}`);
+                addLogEntry(botId, 'command', `[${botData.config.username}] Wykonano komendę: /${command}`);
+            } else {
+                // Regular message
+                botData.bot.chat(message);
+                addLogEntry(botId, 'chat_out', `[${botData.config.username}] Wysłano: ${message}`);
+            }
+            
+            socket.emit('chatMessageSent', { 
+                botId, 
+                success: true 
+            });
+        } catch (error) {
+            socket.emit('chatMessageSent', { 
+                botId, 
+                success: false, 
+                error: error.message 
+            });
+            addLogEntry(botId, 'error', `Błąd wysyłania wiadomości: ${error.message}`);
+        }
+    });
+
     // Clear logs
     socket.on('clearLogs', (botId) => {
         if (botLogs.has(botId)) {
@@ -438,9 +488,22 @@ async function startBot(botId) {
             addLogEntry(botId, 'error', `Bot ${botData.config.username} został rozłączony: ${packet.reason}`);
         });
 
+        // Enhanced chat logging
         bot.on('chat', (username, message) => {
             if (username === bot.username) return;
-            addLogEntry(botId, 'chat', `[${botData.config.username}] ${username}: ${message}`);
+            addLogEntry(botId, 'chat', `[CHAT] ${username}: ${message}`);
+        });
+
+        // Log bot's own messages (when sent via chat input)
+        bot.on('message', (jsonMsg) => {
+            const messageText = jsonMsg.toString();
+            // Filter out some spam messages but keep important ones
+            if (!messageText.includes('§') && 
+                !messageText.includes('[Server]') && 
+                !messageText.startsWith('Teleported') &&
+                messageText.trim().length > 0) {
+                addLogEntry(botId, 'server', `[SERVER] ${messageText}`);
+            }
         });
 
         // Obsługa respawn po śmierci
@@ -598,5 +661,5 @@ const PORT = process.env.PORT || 80;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 zawixHolder server uruchomiony na porcie ${PORT}`);
     console.log(`🌐 Adres: http://localhost:${PORT}`);
-    console.log('🤖 Gotowy do zarządzania botami Minecraft z automatycznym wykrywaniem wersji!');
+    console.log('🤖 Gotowy do zarządzania botami Minecraft z automatycznym wykrywaniem wersji i chat funkcjami!');
 });
